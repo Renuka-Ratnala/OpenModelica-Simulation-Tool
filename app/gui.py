@@ -1,0 +1,767 @@
+import sys
+from pathlib import Path
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+    QCheckBox,
+)
+
+from matplotlib.backends.backend_qtagg import (
+    FigureCanvasQTAgg,
+    NavigationToolbar2QT
+)
+from matplotlib.figure import Figure
+
+from app.executor import run_simulation
+from app.result_reader import read_simulation_result
+
+
+class OpenModelicaGUI(QMainWindow):
+    """Main window for the OpenModelica simulation application."""
+
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("OpenModelica Simulation Tool")
+        self.setMinimumSize(950, 650)
+        self.resize(1100, 750)
+
+        # Simulation data
+        self.simulation_data = None
+        self.selected_application = None
+
+        # Dynamic variable checkboxes
+        self.variable_checks = {}
+
+        self.create_ui()
+
+    # ========================================================
+    # USER INTERFACE
+    # ========================================================
+
+    def create_ui(self):
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QVBoxLayout(central_widget)
+
+        main_layout.setContentsMargins(
+            25,
+            20,
+            25,
+            20
+        )
+
+        main_layout.setSpacing(15)
+
+        # ====================================================
+        # HEADER
+        # ====================================================
+
+        title = QLabel(
+            "OpenModelica Simulation Tool"
+        )
+
+        title.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        title.setStyleSheet(
+            "font-size: 26px; font-weight: bold;"
+        )
+
+        subtitle = QLabel(
+            "Run and analyze OpenModelica simulations"
+        )
+
+        subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        subtitle.setStyleSheet(
+            "font-size: 13px;"
+        )
+
+        main_layout.addWidget(title)
+        main_layout.addWidget(subtitle)
+
+        # ====================================================
+        # SIMULATION CONTROLS
+        # ====================================================
+
+        controls_group = QGroupBox(
+            "Simulation Controls"
+        )
+
+        controls_layout = QGridLayout()
+
+        # ----------------------------------------------------
+        # Application
+        # ----------------------------------------------------
+
+        application_label = QLabel(
+            "Application:"
+        )
+
+        self.application_entry = QLineEdit()
+
+        self.application_entry.setPlaceholderText(
+            "Select an executable..."
+        )
+
+        browse_button = QPushButton(
+            "Browse"
+        )
+
+        browse_button.clicked.connect(
+            self.select_application
+        )
+
+        controls_layout.addWidget(
+            application_label,
+            0,
+            0
+        )
+
+        controls_layout.addWidget(
+            self.application_entry,
+            0,
+            1
+        )
+
+        controls_layout.addWidget(
+            browse_button,
+            0,
+            2
+        )
+
+        # ----------------------------------------------------
+        # Start Time
+        # ----------------------------------------------------
+
+        start_label = QLabel(
+            "Start Time:"
+        )
+
+        self.start_entry = QLineEdit(
+            "0"
+        )
+
+        self.start_entry.setPlaceholderText(
+            "Number"
+        )
+
+        controls_layout.addWidget(
+            start_label,
+            1,
+            0
+        )
+
+        controls_layout.addWidget(
+            self.start_entry,
+            1,
+            1
+        )
+
+        # ----------------------------------------------------
+        # Stop Time
+        # ----------------------------------------------------
+
+        stop_label = QLabel(
+            "Stop Time:"
+        )
+
+        self.stop_entry = QLineEdit(
+            "4"
+        )
+
+        self.stop_entry.setPlaceholderText(
+            "Number"
+        )
+
+        controls_layout.addWidget(
+            stop_label,
+            2,
+            0
+        )
+
+        controls_layout.addWidget(
+            self.stop_entry,
+            2,
+            1
+        )
+
+        # ----------------------------------------------------
+        # Run Simulation
+        # ----------------------------------------------------
+
+        self.run_button = QPushButton(
+            "▶  Run Simulation"
+        )
+
+        self.run_button.clicked.connect(
+            self.run_and_plot
+        )
+
+        controls_layout.addWidget(
+            self.run_button,
+            3,
+            1
+        )
+
+        controls_group.setLayout(
+            controls_layout
+        )
+
+        main_layout.addWidget(
+            controls_group
+        )
+
+        # ====================================================
+        # VARIABLES
+        # ====================================================
+
+        variables_group = QGroupBox(
+            "Variables"
+        )
+
+        self.variables_layout = QHBoxLayout()
+
+        self.variables_placeholder = QLabel(
+            "Run a simulation to load available variables."
+        )
+
+        self.variables_layout.addWidget(
+            self.variables_placeholder
+        )
+
+        self.variables_layout.addStretch()
+
+        variables_group.setLayout(
+            self.variables_layout
+        )
+
+        main_layout.addWidget(
+            variables_group
+        )
+
+        # ====================================================
+        # STATUS
+        # ====================================================
+
+        status_layout = QHBoxLayout()
+
+        status_title = QLabel(
+            "Status:"
+        )
+
+        status_title.setStyleSheet(
+            "font-weight: bold;"
+        )
+
+        self.status_label = QLabel(
+            "Ready"
+        )
+
+        status_layout.addWidget(
+            status_title
+        )
+
+        status_layout.addWidget(
+            self.status_label
+        )
+
+        status_layout.addStretch()
+
+        main_layout.addLayout(
+            status_layout
+        )
+
+        # ====================================================
+        # GRAPH
+        # ====================================================
+
+        graph_group = QGroupBox(
+            "Simulation Results"
+        )
+
+        graph_layout = QVBoxLayout()
+
+        self.figure = Figure(
+            figsize=(9, 5),
+            dpi=100
+        )
+
+        self.canvas = FigureCanvasQTAgg(
+            self.figure
+        )
+
+# Matplotlib navigation toolbar
+        self.toolbar = NavigationToolbar2QT(
+            self.canvas,
+            self
+        )
+
+        graph_layout.addWidget(
+            self.toolbar
+        )
+
+        graph_layout.addWidget(
+            self.canvas
+        )
+
+        graph_layout.addWidget(
+            self.canvas
+        )
+
+        graph_group.setLayout(
+            graph_layout
+        )
+
+        main_layout.addWidget(
+            graph_group,
+            stretch=1
+        )
+
+        # Show initial graph message
+        self.update_graph()
+
+    # ========================================================
+    # APPLICATION SELECTION
+    # ========================================================
+
+    def select_application(self):
+        """Allow the user to select an executable."""
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Application",
+            "",
+            "Executable Files (*.exe);;All Files (*)"
+        )
+
+        if file_path:
+
+            self.selected_application = Path(
+                file_path
+            )
+
+            self.application_entry.setText(
+                file_path
+            )
+
+    # ========================================================
+    # VALIDATION
+    # ========================================================
+
+    def validate_inputs(self):
+        """Validate application and simulation time inputs."""
+
+        application = (
+            self.application_entry
+            .text()
+            .strip()
+        )
+
+        if not application:
+
+            raise ValueError(
+                "Please select an application to execute."
+            )
+
+        application_path = Path(
+            application
+        )
+
+        if not application_path.exists():
+
+            raise FileNotFoundError(
+                "Selected application does not exist."
+            )
+
+        if application_path.suffix.lower() != ".exe":
+
+            raise ValueError(
+                "Please select a valid executable (.exe) file."
+            )
+
+        try:
+
+            start_time = float(
+                self.start_entry
+                .text()
+                .strip()
+            )
+
+            stop_time = float(
+                self.stop_entry
+                .text()
+                .strip()
+            )
+
+        except ValueError:
+
+            raise ValueError(
+                "Start time and stop time must be numbers."
+            )
+
+        if start_time < 0:
+
+            raise ValueError(
+                "Start time cannot be negative."
+            )
+
+        if stop_time <= start_time:
+
+            raise ValueError(
+                "Stop time must be greater than start time."
+            )
+
+        return (
+            application_path,
+            start_time,
+            stop_time
+        )
+
+    # ========================================================
+    # RUN SIMULATION
+    # ========================================================
+
+    def run_and_plot(self):
+        """Run the selected OpenModelica executable."""
+
+        try:
+
+            (
+                application,
+                start_time,
+                stop_time
+            ) = self.validate_inputs()
+
+            self.status_label.setText(
+                "Running simulation..."
+            )
+
+            self.run_button.setEnabled(
+                False
+            )
+
+            QApplication.processEvents()
+
+            # ------------------------------------------------
+            # Run simulation
+            # ------------------------------------------------
+
+            result = run_simulation(
+                executable_path=application,
+                start_time=start_time,
+                stop_time=stop_time
+            )
+
+            if result.returncode != 0:
+
+                error_message = (
+                    result.stderr
+                    if result.stderr
+                    else result.stdout
+                )
+
+                if not error_message:
+
+                    error_message = (
+                        "Simulation process failed."
+                    )
+
+                raise RuntimeError(
+                    error_message
+                )
+
+            # ------------------------------------------------
+            # Locate result file
+            # ------------------------------------------------
+
+            result_file = application.with_name(
+                application.stem + "_res.mat"
+            )
+
+            if not result_file.exists():
+
+                raise FileNotFoundError(
+                    "Simulation completed, but "
+                    "the result file was not found:\n\n"
+                    f"{result_file}"
+                )
+
+            # ------------------------------------------------
+            # Read results
+            # ------------------------------------------------
+
+            self.status_label.setText(
+                "Reading simulation results..."
+            )
+
+            QApplication.processEvents()
+
+            self.simulation_data = (
+                read_simulation_result(
+                    result_file
+                )
+            )
+
+            # ------------------------------------------------
+            # Create variable selection
+            # ------------------------------------------------
+
+            self.update_variable_selection()
+
+            # ------------------------------------------------
+            # Display graph
+            # ------------------------------------------------
+
+            self.update_graph()
+
+            self.status_label.setText(
+                "Simulation completed successfully."
+            )
+
+        except Exception as error:
+
+            self.status_label.setText(
+                "Simulation failed."
+            )
+
+            QMessageBox.critical(
+                self,
+                "Simulation Error",
+                str(error)
+            )
+
+        finally:
+
+            self.run_button.setEnabled(
+                True
+            )
+
+    # ========================================================
+    # DYNAMIC VARIABLE SELECTION
+    # ========================================================
+
+    def update_variable_selection(self):
+        """Create checkboxes from variables found in the result."""
+
+        # Remove old widgets
+        while self.variables_layout.count():
+
+            item = (
+                self.variables_layout
+                .takeAt(0)
+            )
+
+            widget = item.widget()
+
+            if widget is not None:
+
+                widget.deleteLater()
+
+        # Clear old checkbox references
+        self.variable_checks.clear()
+
+        # Safety check
+        if self.simulation_data is None:
+
+            self.variables_placeholder = QLabel(
+                "Run a simulation to load available variables."
+            )
+
+            self.variables_layout.addWidget(
+                self.variables_placeholder
+            )
+
+            self.variables_layout.addStretch()
+
+            return
+
+        variables = self.simulation_data[
+            "variables"
+        ]
+
+        # Create a checkbox for every variable
+        for name in variables:
+
+            checkbox = QCheckBox(
+                name
+            )
+
+            # Select the two main tank heights by default
+            if name in (
+                "tank1.h",
+                "tank2.h"
+            ):
+
+                checkbox.setChecked(
+                    True
+                )
+
+            checkbox.stateChanged.connect(
+                self.update_graph
+            )
+
+            self.variable_checks[
+                name
+            ] = checkbox
+
+            self.variables_layout.addWidget(
+                checkbox
+            )
+
+        self.variables_layout.addStretch()
+
+    # ========================================================
+    # GRAPH
+    # ========================================================
+
+    def update_graph(self):
+        """Update graph based on selected variables."""
+
+        self.figure.clear()
+
+        axis = self.figure.add_subplot(
+            111
+        )
+
+        # ----------------------------------------------------
+        # No simulation yet
+        # ----------------------------------------------------
+
+        if self.simulation_data is None:
+
+            axis.text(
+                0.5,
+                0.5,
+                "Run a simulation to display results.",
+                ha="center",
+                va="center",
+                transform=axis.transAxes
+            )
+
+            axis.set_axis_off()
+
+            self.canvas.draw()
+
+            return
+
+        # ----------------------------------------------------
+        # Simulation data
+        # ----------------------------------------------------
+
+        time = self.simulation_data[
+            "time"
+        ]
+
+        variables = self.simulation_data[
+            "variables"
+        ]
+
+        plotted = False
+
+        # ----------------------------------------------------
+        # Plot selected variables
+        # ----------------------------------------------------
+
+        for name, checkbox in (
+            self.variable_checks.items()
+        ):
+
+            if checkbox.isChecked():
+
+                axis.plot(
+                    time,
+                    variables[name],
+                    label=name
+                )
+
+                plotted = True
+
+        # ----------------------------------------------------
+        # Nothing selected
+        # ----------------------------------------------------
+
+        if not plotted:
+
+            axis.text(
+                0.5,
+                0.5,
+                "Select at least one variable.",
+                ha="center",
+                va="center",
+                transform=axis.transAxes
+            )
+
+            axis.set_axis_off()
+
+        # ----------------------------------------------------
+        # Graph formatting
+        # ----------------------------------------------------
+
+        else:
+
+            axis.set_title(
+                "OpenModelica Simulation Results"
+            )
+
+            axis.set_xlabel(
+                "Time (s)"
+            )
+
+            axis.set_ylabel(
+                "Value"
+            )
+
+            axis.grid(
+                True,
+                alpha=0.3
+            )
+
+            axis.legend()
+
+        self.figure.tight_layout()
+
+        self.canvas.draw()
+
+
+# ============================================================
+# APPLICATION ENTRY POINT
+# ============================================================
+
+def create_gui():
+    """Create and start the PyQt6 application."""
+
+    app = QApplication(
+        sys.argv
+    )
+
+    window = OpenModelicaGUI()
+
+    window.show()
+
+    sys.exit(
+        app.exec()
+    )
+
+
+if __name__ == "__main__":
+
+    create_gui()

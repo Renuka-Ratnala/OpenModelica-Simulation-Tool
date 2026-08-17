@@ -1,0 +1,26 @@
+@"
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+
+# OpenModelica generated files
+*.exe
+*.dll
+*.mat
+*.log
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+"@ | Set-Content .gitignore
