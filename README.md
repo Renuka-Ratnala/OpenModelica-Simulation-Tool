@@ -1,46 +1,58 @@
 # OpenModelica Simulation Tool
 
-A desktop application built with **Python, PyQt6, OpenModelica, DyMat, and Matplotlib** for running OpenModelica simulation executables and interactively analyzing their simulation results.
+A Python desktop application for running OpenModelica simulations and interactively visualizing their results.
+
+The application provides a PyQt6-based graphical interface that allows users to select an OpenModelica-generated executable, configure simulation time, run the simulation, automatically detect variables from the generated result file, and visualize selected variables using Matplotlib.
 
 ## Features
 
-- Select an OpenModelica-generated `.exe` using a file browser
+- Select an OpenModelica simulation executable through a file browser
 - Configure simulation start and stop times
 - Validate simulation inputs
-- Execute OpenModelica simulations directly from the GUI
+- Run OpenModelica simulations directly from the desktop application
 - Automatically locate the generated `.mat` result file
 - Read OpenModelica result files using DyMat
 - Dynamically detect available simulation variables
 - Select multiple variables for visualization
-- Interactive Matplotlib graph
+- Interactive Matplotlib visualization
 - Zoom, pan, reset, and save graph functionality
-- Simulation status and error reporting
+- Simulation status and error handling
 
-## Technologies Used
+## Technologies
 
-- **Python 3.11**
-- **PyQt6** - Desktop GUI
-- **OpenModelica** - Simulation engine
-- **DyMat** - OpenModelica result-file reader
-- **Matplotlib** - Simulation data visualization
-- **NumPy / SciPy** - Numerical and scientific computing
-- **Git / GitHub** - Version control
+| Technology | Purpose |
+|---|---|
+| Python 3.11 | Application development |
+| PyQt6 | Desktop GUI |
+| OpenModelica | Simulation engine |
+| DyMat | Reading OpenModelica result files |
+| Matplotlib | Data visualization |
+| NumPy | Numerical processing |
+| SciPy | Scientific computing |
+| Git | Version control |
 
-## Project Structure
+## Architecture
 
 ```text
-OpenModelica-Simulation-Tool/
-│
-├── app/
-│   ├── executor.py
-│   ├── gui.py
-│   ├── main.py
-│   └── result_reader.py
-│
-├── model/
-│   └── TwoTanksConnected/
-│       └── OpenModelica model files
-│
-├── requirements.txt
-├── .gitignore
-└── README.md
+OpenModelica Model
+        │
+        ▼
+OpenModelica-generated executable
+        │
+        ▼
+Python subprocess
+        │
+        ▼
+Simulation result (.mat)
+        │
+        ▼
+DyMat result reader
+        │
+        ▼
+Dynamic variable detection
+        │
+        ▼
+PyQt6 variable selection
+        │
+        ▼
+Matplotlib visualization
