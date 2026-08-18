@@ -1,4 +1,5 @@
 import sys
+import csv
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -34,16 +35,37 @@ class OpenModelicaGUI(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("OpenModelica Simulation Tool")
-        self.setMinimumSize(950, 650)
-        self.resize(1100, 750)
+        self.setWindowTitle(
+            "OpenModelica Simulation Tool"
+        )
 
+        self.setMinimumSize(
+            950,
+            650
+        )
+
+        self.resize(
+            1100,
+            750
+        )
+
+        # ----------------------------------------------------
         # Simulation data
+        # ----------------------------------------------------
+
         self.simulation_data = None
+
         self.selected_application = None
 
+        # ----------------------------------------------------
         # Dynamic variable checkboxes
+        # ----------------------------------------------------
+
         self.variable_checks = {}
+
+        # ----------------------------------------------------
+        # Create UI
+        # ----------------------------------------------------
 
         self.create_ui()
 
@@ -54,9 +76,14 @@ class OpenModelicaGUI(QMainWindow):
     def create_ui(self):
 
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
 
-        main_layout = QVBoxLayout(central_widget)
+        self.setCentralWidget(
+            central_widget
+        )
+
+        main_layout = QVBoxLayout(
+            central_widget
+        )
 
         main_layout.setContentsMargins(
             25,
@@ -65,7 +92,9 @@ class OpenModelicaGUI(QMainWindow):
             20
         )
 
-        main_layout.setSpacing(15)
+        main_layout.setSpacing(
+            15
+        )
 
         # ====================================================
         # HEADER
@@ -95,8 +124,13 @@ class OpenModelicaGUI(QMainWindow):
             "font-size: 13px;"
         )
 
-        main_layout.addWidget(title)
-        main_layout.addWidget(subtitle)
+        main_layout.addWidget(
+            title
+        )
+
+        main_layout.addWidget(
+            subtitle
+        )
 
         # ====================================================
         # SIMULATION CONTROLS
@@ -222,6 +256,29 @@ class OpenModelicaGUI(QMainWindow):
             1
         )
 
+        # ----------------------------------------------------
+        # Export CSV
+        # ----------------------------------------------------
+
+        self.export_button = QPushButton(
+            "Export CSV"
+        )
+
+        self.export_button.clicked.connect(
+            self.export_csv
+        )
+
+        # Disabled until simulation completes
+        self.export_button.setEnabled(
+            False
+        )
+
+        controls_layout.addWidget(
+            self.export_button,
+            3,
+            2
+        )
+
         controls_group.setLayout(
             controls_layout
         )
@@ -309,7 +366,10 @@ class OpenModelicaGUI(QMainWindow):
             self.figure
         )
 
-# Matplotlib navigation toolbar
+        # ----------------------------------------------------
+        # Matplotlib navigation toolbar
+        # ----------------------------------------------------
+
         self.toolbar = NavigationToolbar2QT(
             self.canvas,
             self
@@ -319,10 +379,8 @@ class OpenModelicaGUI(QMainWindow):
             self.toolbar
         )
 
-        graph_layout.addWidget(
-            self.canvas
-        )
-
+        # IMPORTANT:
+        # Add canvas only ONCE
         graph_layout.addWidget(
             self.canvas
         )
@@ -533,6 +591,14 @@ class OpenModelicaGUI(QMainWindow):
 
             self.update_graph()
 
+            # ------------------------------------------------
+            # Enable CSV export
+            # ------------------------------------------------
+
+            self.export_button.setEnabled(
+                True
+            )
+
             self.status_label.setText(
                 "Simulation completed successfully."
             )
@@ -556,13 +622,144 @@ class OpenModelicaGUI(QMainWindow):
             )
 
     # ========================================================
+    # EXPORT CSV
+    # ========================================================
+
+    def export_csv(self):
+        """Export selected simulation variables to a CSV file."""
+
+        if self.simulation_data is None:
+
+            QMessageBox.warning(
+                self,
+                "No Results",
+                "Run a simulation before exporting results."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # Get selected variables
+        # ----------------------------------------------------
+
+        selected_variables = [
+            name
+            for name, checkbox
+            in self.variable_checks.items()
+            if checkbox.isChecked()
+        ]
+
+        if not selected_variables:
+
+            QMessageBox.warning(
+                self,
+                "No Variables Selected",
+                "Please select at least one variable to export."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # Select save location
+        # ----------------------------------------------------
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Simulation Results",
+            "simulation_results.csv",
+            "CSV Files (*.csv)"
+        )
+
+        if not file_path:
+
+            return
+
+        # ----------------------------------------------------
+        # Get simulation data
+        # ----------------------------------------------------
+
+        time = self.simulation_data[
+            "time"
+        ]
+
+        variables = self.simulation_data[
+            "variables"
+        ]
+
+        # ----------------------------------------------------
+        # Write CSV
+        # ----------------------------------------------------
+
+        try:
+
+            with open(
+                file_path,
+                "w",
+                newline="",
+                encoding="utf-8"
+            ) as csv_file:
+
+                writer = csv.writer(
+                    csv_file
+                )
+
+                # Header
+                writer.writerow(
+                    [
+                        "time"
+                    ] + selected_variables
+                )
+
+                # Data rows
+                for index in range(
+                    len(time)
+                ):
+
+                    row = [
+                        time[index]
+                    ]
+
+                    for name in selected_variables:
+
+                        row.append(
+                            variables[name][index]
+                        )
+
+                    writer.writerow(
+                        row
+                    )
+
+            self.status_label.setText(
+                "CSV exported successfully."
+            )
+
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                "Simulation results exported successfully:\n\n"
+                f"{file_path}"
+            )
+
+        except Exception as error:
+
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Could not export CSV:\n\n"
+                f"{error}"
+            )
+
+    # ========================================================
     # DYNAMIC VARIABLE SELECTION
     # ========================================================
 
     def update_variable_selection(self):
         """Create checkboxes from variables found in the result."""
 
+        # ----------------------------------------------------
         # Remove old widgets
+        # ----------------------------------------------------
+
         while self.variables_layout.count():
 
             item = (
@@ -576,10 +773,16 @@ class OpenModelicaGUI(QMainWindow):
 
                 widget.deleteLater()
 
+        # ----------------------------------------------------
         # Clear old checkbox references
+        # ----------------------------------------------------
+
         self.variable_checks.clear()
 
+        # ----------------------------------------------------
         # Safety check
+        # ----------------------------------------------------
+
         if self.simulation_data is None:
 
             self.variables_placeholder = QLabel(
@@ -594,18 +797,26 @@ class OpenModelicaGUI(QMainWindow):
 
             return
 
+        # ----------------------------------------------------
+        # Get variables
+        # ----------------------------------------------------
+
         variables = self.simulation_data[
             "variables"
         ]
 
-        # Create a checkbox for every variable
+        # ----------------------------------------------------
+        # Create checkbox for every variable
+        # ----------------------------------------------------
+
         for name in variables:
 
             checkbox = QCheckBox(
                 name
             )
 
-            # Select the two main tank heights by default
+            # Select the two main tank heights
+            # by default
             if name in (
                 "tank1.h",
                 "tank2.h"
@@ -633,7 +844,7 @@ class OpenModelicaGUI(QMainWindow):
     # GRAPH
     # ========================================================
 
-    def update_graph(self):
+    def update_graph(self, *args):
         """Update graph based on selected variables."""
 
         self.figure.clear()
@@ -664,7 +875,7 @@ class OpenModelicaGUI(QMainWindow):
             return
 
         # ----------------------------------------------------
-        # Simulation data
+        # Get simulation data
         # ----------------------------------------------------
 
         time = self.simulation_data[
@@ -687,9 +898,17 @@ class OpenModelicaGUI(QMainWindow):
 
             if checkbox.isChecked():
 
+                if name not in variables:
+
+                    continue
+
+                values = variables[
+                    name
+                ]
+
                 axis.plot(
                     time,
-                    variables[name],
+                    values,
                     label=name
                 )
 
@@ -761,6 +980,10 @@ def create_gui():
         app.exec()
     )
 
+
+# ============================================================
+# START APPLICATION
+# ============================================================
 
 if __name__ == "__main__":
 
