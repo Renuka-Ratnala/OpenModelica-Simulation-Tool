@@ -2,21 +2,28 @@
 
 A Python desktop application for running OpenModelica simulations and interactively visualizing their results.
 
-The application provides a PyQt6-based graphical interface that allows users to select an OpenModelica-generated executable, configure simulation time, run the simulation, automatically detect variables from the generated result file, and visualize selected variables using Matplotlib.
+The application provides a PyQt6-based graphical interface that allows users to select an OpenModelica-generated executable, configure simulation start and stop times, execute the simulation, automatically read the generated `.mat` result file, detect available simulation variables, visualize selected variables, and export simulation results to CSV.
+
+---
 
 ## Features
 
-- Select an OpenModelica simulation executable through a file browser
+- Select an OpenModelica simulation executable using a file browser
 - Configure simulation start and stop times
-- Validate simulation inputs
-- Run OpenModelica simulations directly from the desktop application
+- Validate simulation inputs before execution
+- Enforce the required simulation condition:
+  `0 <= start time < stop time < 5`
+- Run the OpenModelica executable using Python `subprocess`
 - Automatically locate the generated `.mat` result file
 - Read OpenModelica result files using DyMat
 - Dynamically detect available simulation variables
 - Select multiple variables for visualization
 - Interactive Matplotlib visualization
 - Zoom, pan, reset, and save graph functionality
-- Simulation status and error handling
+- Export selected simulation variables to CSV
+- Display simulation status and errors through the GUI
+
+---
 
 ## Technologies
 
@@ -31,13 +38,15 @@ The application provides a PyQt6-based graphical interface that allows users to 
 | SciPy | Scientific computing |
 | Git | Version control |
 
-## Architecture
+---
+
+## Project Architecture
 
 ```text
 OpenModelica Model
         │
         ▼
-OpenModelica-generated executable
+Compiled OpenModelica executable
         │
         ▼
 Python subprocess
@@ -56,3 +65,6 @@ PyQt6 variable selection
         │
         ▼
 Matplotlib visualization
+        │
+        ▼
+CSV export
