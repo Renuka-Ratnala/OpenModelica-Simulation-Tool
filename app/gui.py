@@ -1,10 +1,11 @@
-import sys
 import csv
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -16,12 +17,11 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QCheckBox,
 )
 
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg,
-    NavigationToolbar2QT
+    NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
 
@@ -50,21 +50,17 @@ class OpenModelicaGUI(QMainWindow):
         )
 
         # ----------------------------------------------------
-        # Simulation data
+        # Application state
         # ----------------------------------------------------
 
         self.simulation_data = None
-
         self.selected_application = None
 
-        # ----------------------------------------------------
-        # Dynamic variable checkboxes
-        # ----------------------------------------------------
-
+        # Store dynamically created variable checkboxes
         self.variable_checks = {}
 
         # ----------------------------------------------------
-        # Create UI
+        # Build interface
         # ----------------------------------------------------
 
         self.create_ui()
@@ -74,6 +70,7 @@ class OpenModelicaGUI(QMainWindow):
     # ========================================================
 
     def create_ui(self):
+        """Create the complete graphical user interface."""
 
         central_widget = QWidget()
 
@@ -195,7 +192,7 @@ class OpenModelicaGUI(QMainWindow):
         )
 
         self.start_entry.setPlaceholderText(
-            "Number"
+            "Integer: 0-3"
         )
 
         controls_layout.addWidget(
@@ -223,7 +220,7 @@ class OpenModelicaGUI(QMainWindow):
         )
 
         self.stop_entry.setPlaceholderText(
-            "Number"
+            "Integer: 1-4"
         )
 
         controls_layout.addWidget(
@@ -268,7 +265,7 @@ class OpenModelicaGUI(QMainWindow):
             self.export_csv
         )
 
-        # Disabled until simulation completes
+        # CSV is disabled until a simulation succeeds
         self.export_button.setEnabled(
             False
         )
@@ -357,19 +354,18 @@ class OpenModelicaGUI(QMainWindow):
 
         graph_layout = QVBoxLayout()
 
+        # Matplotlib figure
         self.figure = Figure(
             figsize=(9, 5),
             dpi=100
         )
 
+        # Matplotlib canvas
         self.canvas = FigureCanvasQTAgg(
             self.figure
         )
 
-        # ----------------------------------------------------
-        # Matplotlib navigation toolbar
-        # ----------------------------------------------------
-
+        # Matplotlib toolbar
         self.toolbar = NavigationToolbar2QT(
             self.canvas,
             self
@@ -379,8 +375,6 @@ class OpenModelicaGUI(QMainWindow):
             self.toolbar
         )
 
-        # IMPORTANT:
-        # Add canvas only ONCE
         graph_layout.addWidget(
             self.canvas
         )
@@ -394,7 +388,7 @@ class OpenModelicaGUI(QMainWindow):
             stretch=1
         )
 
-        # Show initial graph message
+        # Display initial message
         self.update_graph()
 
     # ========================================================
@@ -426,7 +420,19 @@ class OpenModelicaGUI(QMainWindow):
     # ========================================================
 
     def validate_inputs(self):
-        """Validate application and simulation time inputs."""
+        """
+        Validate application and simulation time inputs.
+
+        FOSSEE requirement:
+
+            0 <= start time < stop time < 5
+
+        Start and stop times must be integers.
+        """
+
+        # ----------------------------------------------------
+        # Validate application
+        # ----------------------------------------------------
 
         application = (
             self.application_entry
@@ -456,15 +462,19 @@ class OpenModelicaGUI(QMainWindow):
                 "Please select a valid executable (.exe) file."
             )
 
+        # ----------------------------------------------------
+        # Validate times
+        # ----------------------------------------------------
+
         try:
 
-            start_time = float(
+            start_time = int(
                 self.start_entry
                 .text()
                 .strip()
             )
 
-            stop_time = float(
+            stop_time = int(
                 self.stop_entry
                 .text()
                 .strip()
@@ -473,19 +483,29 @@ class OpenModelicaGUI(QMainWindow):
         except ValueError:
 
             raise ValueError(
-                "Start time and stop time must be numbers."
+                "Start time and stop time must be integers."
             )
+
+        # ----------------------------------------------------
+        # FOSSEE test condition
+        # ----------------------------------------------------
 
         if start_time < 0:
 
             raise ValueError(
-                "Start time cannot be negative."
+                "Start time must be greater than or equal to 0."
             )
 
-        if stop_time <= start_time:
+        if stop_time >= 5:
 
             raise ValueError(
-                "Stop time must be greater than start time."
+                "Stop time must be less than 5."
+            )
+
+        if start_time >= stop_time:
+
+            raise ValueError(
+                "Start time must be less than stop time."
             )
 
         return (
@@ -509,6 +529,10 @@ class OpenModelicaGUI(QMainWindow):
                 stop_time
             ) = self.validate_inputs()
 
+            # ------------------------------------------------
+            # Update status
+            # ------------------------------------------------
+
             self.status_label.setText(
                 "Running simulation..."
             )
@@ -520,7 +544,7 @@ class OpenModelicaGUI(QMainWindow):
             QApplication.processEvents()
 
             # ------------------------------------------------
-            # Run simulation
+            # Run OpenModelica executable
             # ------------------------------------------------
 
             result = run_simulation(
@@ -528,6 +552,10 @@ class OpenModelicaGUI(QMainWindow):
                 start_time=start_time,
                 stop_time=stop_time
             )
+
+            # ------------------------------------------------
+            # Check simulation result
+            # ------------------------------------------------
 
             if result.returncode != 0:
 
@@ -564,7 +592,7 @@ class OpenModelicaGUI(QMainWindow):
                 )
 
             # ------------------------------------------------
-            # Read results
+            # Read simulation results
             # ------------------------------------------------
 
             self.status_label.setText(
@@ -580,13 +608,13 @@ class OpenModelicaGUI(QMainWindow):
             )
 
             # ------------------------------------------------
-            # Create variable selection
+            # Create variable checkboxes
             # ------------------------------------------------
 
             self.update_variable_selection()
 
             # ------------------------------------------------
-            # Display graph
+            # Update graph
             # ------------------------------------------------
 
             self.update_graph()
@@ -626,7 +654,7 @@ class OpenModelicaGUI(QMainWindow):
     # ========================================================
 
     def export_csv(self):
-        """Export selected simulation variables to a CSV file."""
+        """Export selected simulation variables to CSV."""
 
         if self.simulation_data is None:
 
@@ -639,7 +667,7 @@ class OpenModelicaGUI(QMainWindow):
             return
 
         # ----------------------------------------------------
-        # Get selected variables
+        # Find selected variables
         # ----------------------------------------------------
 
         selected_variables = [
@@ -660,7 +688,7 @@ class OpenModelicaGUI(QMainWindow):
             return
 
         # ----------------------------------------------------
-        # Select save location
+        # Select CSV save location
         # ----------------------------------------------------
 
         file_path, _ = QFileDialog.getSaveFileName(
@@ -705,12 +733,10 @@ class OpenModelicaGUI(QMainWindow):
 
                 # Header
                 writer.writerow(
-                    [
-                        "time"
-                    ] + selected_variables
+                    ["time"] + selected_variables
                 )
 
-                # Data rows
+                # Data
                 for index in range(
                     len(time)
                 ):
@@ -750,14 +776,14 @@ class OpenModelicaGUI(QMainWindow):
             )
 
     # ========================================================
-    # DYNAMIC VARIABLE SELECTION
+    # VARIABLE SELECTION
     # ========================================================
 
     def update_variable_selection(self):
-        """Create checkboxes from variables found in the result."""
+        """Create checkboxes from simulation variables."""
 
         # ----------------------------------------------------
-        # Remove old widgets
+        # Remove existing widgets
         # ----------------------------------------------------
 
         while self.variables_layout.count():
@@ -774,7 +800,7 @@ class OpenModelicaGUI(QMainWindow):
                 widget.deleteLater()
 
         # ----------------------------------------------------
-        # Clear old checkbox references
+        # Clear previous references
         # ----------------------------------------------------
 
         self.variable_checks.clear()
@@ -798,7 +824,7 @@ class OpenModelicaGUI(QMainWindow):
             return
 
         # ----------------------------------------------------
-        # Get variables
+        # Get available variables
         # ----------------------------------------------------
 
         variables = self.simulation_data[
@@ -806,7 +832,7 @@ class OpenModelicaGUI(QMainWindow):
         ]
 
         # ----------------------------------------------------
-        # Create checkbox for every variable
+        # Create checkboxes
         # ----------------------------------------------------
 
         for name in variables:
@@ -815,8 +841,7 @@ class OpenModelicaGUI(QMainWindow):
                 name
             )
 
-            # Select the two main tank heights
-            # by default
+            # Select tank heights by default
             if name in (
                 "tank1.h",
                 "tank2.h"
@@ -845,7 +870,11 @@ class OpenModelicaGUI(QMainWindow):
     # ========================================================
 
     def update_graph(self, *args):
-        """Update graph based on selected variables."""
+        """Update the graph based on selected variables."""
+
+        # ----------------------------------------------------
+        # Clear previous graph
+        # ----------------------------------------------------
 
         self.figure.clear()
 
@@ -902,13 +931,9 @@ class OpenModelicaGUI(QMainWindow):
 
                     continue
 
-                values = variables[
-                    name
-                ]
-
                 axis.plot(
                     time,
-                    values,
+                    variables[name],
                     label=name
                 )
 
@@ -926,7 +951,8 @@ class OpenModelicaGUI(QMainWindow):
                 "Select at least one variable.",
                 ha="center",
                 va="center",
-                transform=axis.transAxes
+                transform=axis.transAxes,
+                fontsize=12
             )
 
             axis.set_axis_off()
@@ -980,10 +1006,6 @@ def create_gui():
         app.exec()
     )
 
-
-# ============================================================
-# START APPLICATION
-# ============================================================
 
 if __name__ == "__main__":
 
